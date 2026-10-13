@@ -54,6 +54,51 @@ func (a InquiryApi) GetInquiryList(c *gin.Context) {
 	response.OKWithPage(c, list, total, req.Page, req.Limit)
 }
 
+// InquiryListWithStepNumberResponse 提问列表响应项（含步骤序号）
+type InquiryListWithStepNumberResponse struct {
+	model.NxpSopInquiry
+	StepNumber int `json:"stepNumber"` // 步骤序号（关联步骤填充）
+}
+
+// ListInquiryWithStepNumber 分页获取提问列表，逻辑与 GetInquiryList 一致，
+// 仅响应层额外补充步骤序号 stepNumber（关联 nxp_sop_guide_step.number）。
+func (a InquiryApi) ListInquiryWithStepNumber(c *gin.Context) {
+	var req ListInquiryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		bindFail(c, err)
+		return
+	}
+	response.NormalizePage(&req.Page, &req.Limit, 100)
+
+	list, total, err := service.GetInquiryList(req.Page, req.Limit, req.FaultCode, req.Status)
+	if err != nil {
+		response.FailError(c, err)
+		return
+	}
+
+	// 收集非零 StepID，批量查步骤序号
+	ids := make([]uint, 0, len(list))
+	for _, it := range list {
+		if it.StepID != 0 {
+			ids = append(ids, it.StepID)
+		}
+	}
+	numberMap, err := service.GetStepNumberMap(ids)
+	if err != nil {
+		response.FailError(c, err)
+		return
+	}
+
+	resp := make([]InquiryListWithStepNumberResponse, 0, len(list))
+	for _, it := range list {
+		resp = append(resp, InquiryListWithStepNumberResponse{
+			NxpSopInquiry: it,
+			StepNumber:    numberMap[it.StepID],
+		})
+	}
+	response.OKWithPage(c, resp, total, req.Page, req.Limit)
+}
+
 // CreateInquiry 创建提问
 // 用户启用状态校验由路由上的 middleware.RequireActiveUser() 完成
 func (a InquiryApi) CreateInquiry(c *gin.Context) {

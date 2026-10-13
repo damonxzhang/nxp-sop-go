@@ -39,6 +39,25 @@ func IncrementStepRepairCount(stepID uint) error {
 		Error
 }
 
+// GetStepNumberMap 批量查询步骤 id → number 映射；返回 map，查不到的 key 缺省为 0。
+func GetStepNumberMap(ids []uint) (map[uint]int, error) {
+	m := make(map[uint]int, len(ids))
+	if len(ids) == 0 {
+		return m, nil
+	}
+	var steps []model.NxpSopGuideStep
+	if err := database.SOPDB().
+		Select("id", "number").
+		Where("id IN ?", ids).
+		Find(&steps).Error; err != nil {
+		return nil, err
+	}
+	for _, s := range steps {
+		m[s.ID] = s.Number
+	}
+	return m, nil
+}
+
 // GetInquiryList 分页查询提问列表，可按故障码、状态筛选；均空时分页返回全部。
 func GetInquiryList(page, pageSize int, faultCode, status string) ([]model.NxpSopInquiry, int64, error) {
 	db := database.SOPDB().Model(&model.NxpSopInquiry{})
